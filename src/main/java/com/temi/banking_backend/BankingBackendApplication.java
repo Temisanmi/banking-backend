@@ -11,3 +11,5 @@ public class BankingBackendApplication {
 	}
 
 }
+
+// psql -U temi_banking -d banking_db
