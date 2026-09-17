@@ -37,6 +37,10 @@ public class User {
     private String email;
 
     @NotBlank
+    @Column(nullable = false, unique = true)
+    private String phoneNumber;
+
+    @NotBlank
     @Column(nullable = false)
     private String password;
 

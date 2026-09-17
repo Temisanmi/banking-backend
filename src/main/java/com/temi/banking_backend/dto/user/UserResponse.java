@@ -16,6 +16,7 @@ public class UserResponse {
     private String firstName;
     private String lastName;
     private String email;
+    private String phoneNumber;
     private Role role;
     private LocalDateTime createdAt;
 
@@ -25,6 +26,7 @@ public class UserResponse {
                 user.getFirstName(),
                 user.getLastName(),
                 user.getEmail(),
+                user.getPhoneNumber(),
                 user.getRole(),
                 user.getCreatedAt()
         );
