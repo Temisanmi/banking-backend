@@ -1,0 +1,144 @@
+package com.temi.banking_backend.service;
+
+import com.temi.banking_backend.dto.transaction.DepositRequest;
+import com.temi.banking_backend.dto.transaction.TransactionResponse;
+import com.temi.banking_backend.dto.transaction.TransferRequest;
+import com.temi.banking_backend.dto.transaction.WithdrawRequest;
+import com.temi.banking_backend.entity.Account;
+import com.temi.banking_backend.entity.Transaction;
+import com.temi.banking_backend.entity.User;
+import com.temi.banking_backend.entity.enums.AccountStatus;
+import com.temi.banking_backend.entity.enums.TransactionStatus;
+import com.temi.banking_backend.entity.enums.TransactionType;
+import com.temi.banking_backend.exception.AccountNotActiveException;
+import com.temi.banking_backend.exception.AccountNotFoundException;
+import com.temi.banking_backend.exception.CurrencyMismatchException;
+import com.temi.banking_backend.exception.InsufficientFundsException;
+import com.temi.banking_backend.repository.AccountRepository;
+import com.temi.banking_backend.repository.TransactionRepository;
+import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.Page;
+import org.springframework.data.domain.Pageable;
+import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
+import java.security.SecureRandom;
+import java.time.LocalDateTime;
+
+@Service
+@RequiredArgsConstructor
+public class TransactionService {
+    private final AccountRepository accountRepository;
+    private final TransactionRepository transactionRepository;
+
+    private static final SecureRandom RANDOM = new SecureRandom();
+
+    private String generateUniqueReference() {
+        String reference;
+        do {
+            reference = "TXN-" + (100000000 + RANDOM.nextInt(900000000));
+        } while (transactionRepository.existsByReference(reference));
+        return reference;
+    }
+
+    private Transaction buildTransaction(TransactionType type, BigDecimal amount,
+                                         Account fromAccount, Account toAccount,
+                                         User performedBy, String description) {
+        Transaction transaction = new Transaction();
+        transaction.setType(type);
+        transaction.setAmount(amount);
+        transaction.setFromAccount(fromAccount);
+        transaction.setToAccount(toAccount);
+        transaction.setPerformedBy(performedBy);
+        transaction.setStatus(TransactionStatus.COMPLETED);
+        transaction.setDescription(description);
+        transaction.setReference(generateUniqueReference());
+        transaction.setCompletedAt(LocalDateTime.now());
+        return transaction;
+    }
+
+    private void assertAccountActive(Account account) {
+        if (account.getStatus() != AccountStatus.ACTIVE) {
+            throw new AccountNotActiveException(account.getStatus().name());
+        }
+    }
+    @Transactional
+    public TransactionResponse deposit(DepositRequest request, User performedBy) {
+        Account account = accountRepository.findByIdForUpdate(request.getAccountId())
+                .orElseThrow(() -> new AccountNotFoundException(request.getAccountId()));
+
+        assertAccountActive(account);
+
+        account.setBalance(account.getBalance().add(request.getAmount()));
+        accountRepository.save(account);
+
+        Transaction transaction = buildTransaction(
+                TransactionType.DEPOSIT, request.getAmount(), null, account,
+                performedBy, request.getDescription()
+        );
+        return TransactionResponse.fromEntity(transactionRepository.save(transaction));
+    }
+
+    private void assertSufficientFunds(Account account, BigDecimal amount) {
+        if (account.getBalance().compareTo(amount) < 0) {
+            throw new InsufficientFundsException();
+        }
+    }
+    @Transactional
+    public TransactionResponse withdraw(WithdrawRequest request, User performedBy) {
+        Account account = accountRepository.findByIdForUpdate(request.getAccountId())
+                .orElseThrow(() -> new AccountNotFoundException(request.getAccountId()));
+
+        assertAccountActive(account);
+
+        assertSufficientFunds(account, request.getAmount());
+
+        account.setBalance(account.getBalance().subtract(request.getAmount()));
+        accountRepository.save(account);
+
+        Transaction transaction = buildTransaction(
+                TransactionType.WITHDRAWAL, request.getAmount(), account, null,
+                performedBy, request.getDescription()
+        );
+        return TransactionResponse.fromEntity(transactionRepository.save(transaction));
+    }
+
+    @Transactional
+    public TransactionResponse transfer(TransferRequest request, User performedBy) {
+        Account fromAccount = accountRepository.findByIdForUpdate(request.getFromAccountId())
+                .orElseThrow(() -> new AccountNotFoundException(request.getFromAccountId()));
+
+        Account toAccountLookup = accountRepository.findByAccountNumber(request.getToAccountNumber())
+                .orElseThrow(() -> new AccountNotFoundException(request.getToAccountNumber()));
+
+        Account toAccount = accountRepository.findByIdForUpdate(toAccountLookup.getId())
+                .orElseThrow(() -> new AccountNotFoundException(toAccountLookup.getId()));
+
+        assertAccountActive(fromAccount);
+
+        assertAccountActive(toAccount);
+
+        assertSufficientFunds(fromAccount, request.getAmount());
+
+        if (fromAccount.getCurrency() != toAccount.getCurrency()) {
+            throw new CurrencyMismatchException();
+        }
+
+        fromAccount.setBalance(fromAccount.getBalance().subtract(request.getAmount()));
+        toAccount.setBalance(toAccount.getBalance().add(request.getAmount()));
+
+        accountRepository.save(fromAccount);
+        accountRepository.save(toAccount);
+
+        Transaction transaction = buildTransaction(
+                TransactionType.TRANSFER, request.getAmount(), fromAccount, toAccount,
+                performedBy, request.getDescription()
+        );
+        return TransactionResponse.fromEntity(transactionRepository.save(transaction));
+    }
+
+    public Page<TransactionResponse> getAccountStatement(String accountId, LocalDateTime from, LocalDateTime to, Pageable pageable) {
+        Page<Transaction> transactions = transactionRepository.findStatementForAccount(accountId, from, to, pageable);
+        return transactions.map(TransactionResponse::fromEntity);
+    }
+}

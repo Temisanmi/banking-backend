@@ -38,6 +38,9 @@ public class Transaction {
     @JoinColumn(name = "performed_by_id", nullable = false, updatable = false)
     private User performedBy;
 
+    @Column(nullable = false, unique = true, updatable = false)
+    private String reference;
+
     @Enumerated(EnumType.STRING)
     @Column(nullable = false)
     private TransactionStatus status;
