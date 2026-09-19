@@ -1,19 +1,10 @@
 package com.temi.banking_backend.service;
 
 import com.temi.banking_backend.config.PhoneNumberUtil;
-import com.temi.banking_backend.dto.user.LoginRequest;
-import com.temi.banking_backend.dto.user.RegisterUserRequest;
-import com.temi.banking_backend.dto.user.VerifyOtpRequest;
-import com.temi.banking_backend.dto.user.AuthResponse;
-import com.temi.banking_backend.dto.user.LoginInitiatedResponse;
-import com.temi.banking_backend.dto.user.UserResponse;
+import com.temi.banking_backend.dto.user.*;
 import com.temi.banking_backend.entity.User;
 import com.temi.banking_backend.entity.enums.Role;
-import com.temi.banking_backend.exception.EmailAlreadyExistsException;
-import com.temi.banking_backend.exception.InvalidCredentialsException;
-import com.temi.banking_backend.exception.InvalidOtpException;
-import com.temi.banking_backend.exception.PhoneNumberAlreadyExistsException;
-import com.temi.banking_backend.exception.UserNotFoundException;
+import com.temi.banking_backend.exception.*;
 import com.temi.banking_backend.repository.UserRepository;
 import com.temi.banking_backend.security.JwtService;
 import com.temi.banking_backend.security.OtpService;
@@ -95,5 +86,35 @@ public class AuthService {
         String token = jwtService.generateToken(user);
 
         return new AuthResponse(token, "Bearer", UserResponse.fromEntity(user));
+    }
+
+    @Transactional
+    public UserResponse createStaffUser(CreateStaffRequest request) {
+        if (request.getRole() == Role.CUSTOMER) {
+            throw new InvalidStaffRoleException();
+        }
+
+        if (userRepository.existsByEmail(request.getEmail())) {
+            throw new EmailAlreadyExistsException(request.getEmail());
+        }
+
+        String normalizedPhoneNumber = phoneNumberUtil.normalize(request.getPhoneNumber());
+
+        if (userRepository.existsByPhoneNumber(normalizedPhoneNumber)) {
+            throw new PhoneNumberAlreadyExistsException(normalizedPhoneNumber);
+        }
+
+        User user = new User();
+        user.setFirstName(request.getFirstName());
+        user.setLastName(request.getLastName());
+        user.setEmail(request.getEmail());
+        user.setPhoneNumber(normalizedPhoneNumber);
+        user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setTransactionPin(passwordEncoder.encode(request.getTransactionPin()));
+        user.setRole(request.getRole());
+
+        User savedUser = userRepository.save(user);
+
+        return UserResponse.fromEntity(savedUser);
     }
 }

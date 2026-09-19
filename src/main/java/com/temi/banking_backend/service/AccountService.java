@@ -93,6 +93,12 @@ public class AccountService {
         }
     }
 
+    private void assertIsAdmin(User actor) {
+        if (actor.getRole() != Role.ADMIN) {
+            throw new UnauthorizedAccountAccessException();
+        }
+    }
+
     private void assertTransitionAllowed(AccountStatus from, AccountStatus to){
         boolean allowed = switch (from) {
             case ACTIVE-> to == AccountStatus.FROZEN || to == AccountStatus.CLOSED;
@@ -122,7 +128,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse closeAccount(String accountId, User actor){
-        assertIsTellerOrAdmin(actor);
+        assertIsAdmin(actor);
 
         Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
@@ -138,7 +144,7 @@ public class AccountService {
 
     @Transactional
     public AccountResponse reactivateAccount(String accountId, User actor){
-        assertIsTellerOrAdmin(actor);
+        assertIsAdmin(actor);
 
         Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
