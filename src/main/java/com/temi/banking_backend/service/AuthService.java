@@ -7,6 +7,7 @@ import com.temi.banking_backend.entity.enums.Role;
 import com.temi.banking_backend.exception.*;
 import com.temi.banking_backend.repository.UserRepository;
 import com.temi.banking_backend.security.JwtService;
+import com.temi.banking_backend.security.LoginAttemptService;
 import com.temi.banking_backend.security.OtpService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.password.PasswordEncoder;
@@ -23,6 +24,8 @@ public class AuthService {
     private final UserService userService;
     private final EmailService emailService;
     private final PhoneNumberUtil phoneNumberUtil;
+    private final LoginAttemptService loginAttemptService;
+    private final PasswordResetService passwordResetService;
 
     @Transactional
     public UserResponse register(RegisterUserRequest request) {
@@ -59,18 +62,24 @@ public class AuthService {
     }
 
     public LoginInitiatedResponse login(LoginRequest request) {
+        loginAttemptService.assertNotLocked(request.getEmail());
+
         User user = getUserOrThrowInvalidCredentials(request.getEmail());
 
         if (!passwordEncoder.matches(request.getPassword(), user.getPassword())) {
+            loginAttemptService.recordFailure(request.getEmail());
+
             throw new InvalidCredentialsException();
         }
+
+        loginAttemptService.recordSuccess(request.getEmail());
 
         String otp = otpService.generateOtp(user.getEmail());
 
         emailService.sendOtpEmail(user.getEmail(), otp);
 
         return new LoginInitiatedResponse(
-                "OTP sent to your registered email",
+                "An OTP has been sent to your registered email",
                 user.getEmail()
         );
     }
@@ -116,5 +125,28 @@ public class AuthService {
         User savedUser = userRepository.save(user);
 
         return UserResponse.fromEntity(savedUser);
+    }
+
+    public void forgotPassword(ForgotPasswordRequest request) {
+        userRepository.findByEmail(request.getEmail()).ifPresent(user -> {
+            String code = passwordResetService.generateResetCode(user.getEmail());
+
+            emailService.sendPasswordResetEmail(user.getEmail(), code);
+        });
+    }
+
+    @Transactional
+    public void resetPassword(ResetPasswordRequest request) {
+        boolean isValid = passwordResetService.verifyResetCode(request.getEmail(), request.getCode());
+
+        if (!isValid) {
+            throw new InvalidResetCodeException();
+        }
+
+        User user = getUserOrThrowInvalidCredentials(request.getEmail());
+
+        user.setPassword(passwordEncoder.encode(request.getNewPassword()));
+
+        userRepository.save(user);
     }
 }
