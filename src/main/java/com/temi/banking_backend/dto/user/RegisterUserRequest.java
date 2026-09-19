@@ -29,4 +29,8 @@ public class RegisterUserRequest {
     @NotBlank(message = "Password is required")
     @Size(min = 6, max = 72, message = "Invalid password length")
     private String password;
+
+    @NotBlank(message = "A Transaction PIN is required")
+    @Pattern(regexp = "^\\d{4}$", message = "PIN must be exactly 4 digits")
+    private String transactionPin;
 }
