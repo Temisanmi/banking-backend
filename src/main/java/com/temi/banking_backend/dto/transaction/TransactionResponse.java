@@ -14,6 +14,7 @@ import java.time.LocalDateTime;
 @Setter
 public class TransactionResponse {
     private String id;
+    private String reference;
     private TransactionType type;
     private BigDecimal amount;
     private String fromAccountNumber;
@@ -27,6 +28,7 @@ public class TransactionResponse {
     public static TransactionResponse fromEntity(Transaction transaction){
         return new TransactionResponse(
                 transaction.getId(),
+                transaction.getReference(),
                 transaction.getType(),
                 transaction.getAmount(),
                 transaction.getFromAccount() != null ? transaction.getFromAccount().getAccountNumber() : null,

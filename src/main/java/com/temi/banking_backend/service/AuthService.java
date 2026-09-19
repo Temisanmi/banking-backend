@@ -24,7 +24,6 @@ import org.springframework.transaction.annotation.Transactional;
 @Service
 @RequiredArgsConstructor
 public class AuthService {
-
     private final UserRepository userRepository;
     private final PasswordEncoder passwordEncoder;
     private final OtpService otpService;
@@ -49,6 +48,7 @@ public class AuthService {
         user.setEmail(request.getEmail());
         user.setPhoneNumber(normalizedPhoneNumber);
         user.setPassword(passwordEncoder.encode(request.getPassword()));
+        user.setTransactionPin(passwordEncoder.encode(request.getTransactionPin()));
         user.setRole(Role.CUSTOMER);
 
         User savedUser = userRepository.save(user);
