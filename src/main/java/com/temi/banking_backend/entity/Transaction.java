@@ -52,4 +52,8 @@ public class Transaction {
     private LocalDateTime initiatedAt = LocalDateTime.now();
 
     private LocalDateTime completedAt;
+
+    @OneToOne
+    @JoinColumn(name = "reversal_of_id")
+    private Transaction reversalOf;
 }

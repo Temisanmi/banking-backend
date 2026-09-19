@@ -1,6 +1,5 @@
 package com.temi.banking_backend.service;
 
-import com.temi.banking_backend.config.PhoneNumberUtil;
 import com.temi.banking_backend.dto.transaction.DepositRequest;
 import com.temi.banking_backend.dto.transaction.TransactionResponse;
 import com.temi.banking_backend.dto.transaction.TransferRequest;
@@ -9,19 +8,22 @@ import com.temi.banking_backend.entity.Account;
 import com.temi.banking_backend.entity.Transaction;
 import com.temi.banking_backend.entity.User;
 import com.temi.banking_backend.entity.enums.AccountStatus;
-import com.temi.banking_backend.entity.enums.TransactionStatus;
 import com.temi.banking_backend.entity.enums.TransactionType;
-import com.temi.banking_backend.exception.*;
+import com.temi.banking_backend.exception.AccountNotActiveException;
+import com.temi.banking_backend.exception.AccountNotFoundException;
+import com.temi.banking_backend.exception.CurrencyMismatchException;
+import com.temi.banking_backend.exception.InsufficientFundsException;
+import com.temi.banking_backend.exception.InvalidTransferRecipientException;
 import com.temi.banking_backend.repository.AccountRepository;
 import com.temi.banking_backend.repository.TransactionRepository;
 import com.temi.banking_backend.security.TransactionPinService;
+import com.temi.banking_backend.config.PhoneNumberUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import java.math.BigDecimal;
-import java.security.SecureRandom;
 import java.time.LocalDateTime;
 
 @Service
@@ -31,32 +33,7 @@ public class TransactionService {
     private final TransactionRepository transactionRepository;
     private final TransactionPinService transactionPinService;
     private final PhoneNumberUtil phoneNumberUtil;
-
-    private static final SecureRandom RANDOM = new SecureRandom();
-
-    private String generateUniqueReference() {
-        String reference;
-        do {
-            reference = "TXN-" + (100000000 + RANDOM.nextInt(900000000));
-        } while (transactionRepository.existsByReference(reference));
-        return reference;
-    }
-
-    private Transaction buildTransaction(TransactionType type, BigDecimal amount,
-                                         Account fromAccount, Account toAccount,
-                                         User performedBy, String description) {
-        Transaction transaction = new Transaction();
-        transaction.setType(type);
-        transaction.setAmount(amount);
-        transaction.setFromAccount(fromAccount);
-        transaction.setToAccount(toAccount);
-        transaction.setPerformedBy(performedBy);
-        transaction.setStatus(TransactionStatus.COMPLETED);
-        transaction.setDescription(description);
-        transaction.setReference(generateUniqueReference());
-        transaction.setCompletedAt(LocalDateTime.now());
-        return transaction;
-    }
+    private final TransactionBuilder transactionBuilder;
 
     private void assertAccountActive(Account account) {
         if (account.getStatus() != AccountStatus.ACTIVE) {
@@ -75,7 +52,7 @@ public class TransactionService {
 
         accountRepository.save(account);
 
-        Transaction transaction = buildTransaction(
+        Transaction transaction = transactionBuilder.build(
                 TransactionType.DEPOSIT, request.getAmount(), null, account,
                 performedBy, request.getDescription()
         );
@@ -100,12 +77,14 @@ public class TransactionService {
         assertSufficientFunds(account, request.getAmount());
 
         account.setBalance(account.getBalance().subtract(request.getAmount()));
+
         accountRepository.save(account);
 
-        Transaction transaction = buildTransaction(
+        Transaction transaction = transactionBuilder.build(
                 TransactionType.WITHDRAWAL, request.getAmount(), account, null,
                 performedBy, request.getDescription()
         );
+
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
 
@@ -113,10 +92,9 @@ public class TransactionService {
         boolean hasAccountNumber = request.getToAccountNumber() != null && !request.getToAccountNumber().isBlank();
         boolean hasPhoneNumber = request.getToPhoneNumber() != null && !request.getToPhoneNumber().isBlank();
 
-        if (hasAccountNumber == hasPhoneNumber){
+        if (hasAccountNumber == hasPhoneNumber) {
             throw new InvalidTransferRecipientException(
-                    "Provide only account number or phone number"
-            );
+                    "Provide either account number or phone number");
         }
 
         if (hasAccountNumber) {
@@ -159,7 +137,7 @@ public class TransactionService {
         accountRepository.save(fromAccount);
         accountRepository.save(toAccount);
 
-        Transaction transaction = buildTransaction(
+        Transaction transaction = transactionBuilder.build(
                 TransactionType.TRANSFER, request.getAmount(), fromAccount, toAccount,
                 performedBy, request.getDescription()
         );
