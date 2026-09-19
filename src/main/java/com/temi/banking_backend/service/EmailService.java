@@ -22,7 +22,24 @@ public class EmailService {
         message.setTo(toEmail);
         message.setSubject("Your login verification code");
         message.setText("Your one-time verification code is: " + otp +
-                "\n\nThis code expires in 5 minutes. If you didn't request this, please ignore this email.");
+                "\n\nThis code expires in 5 minutes. If you didn't request this, please ignore this email."
+        );
+
+        try {
+            mailSender.send(message);
+        } catch (MailException e) {
+            throw new EmailDeliveryException(toEmail, e);
+        }
+    }
+
+    public void sendPasswordResetEmail(String toEmail, String code) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(toEmail);
+        message.setSubject("Password reset code");
+        message.setText("Your password reset code is: " + code +
+                "\n\nThis code expires in 10 minutes. If you didn't request this, please ignore this email."
+        );
 
         try {
             mailSender.send(message);
