@@ -29,6 +29,20 @@ public class AuthService {
     private final OtpService otpService;
     private final JwtService jwtService;
     private final UserService userService;
+    private final EmailService emailService;
+
+    private String normalizePhoneNumber(String rawPhoneNumber) {
+        String cleaned = rawPhoneNumber.trim();
+
+        if (cleaned.startsWith("+")) {
+            return cleaned;
+        }
+
+        if (cleaned.startsWith("0")) {
+            cleaned = cleaned.substring(1);
+        }
+        return "+234" + cleaned;
+    }
 
     @Transactional
     public UserResponse register(RegisterUserRequest request) {
@@ -56,6 +70,14 @@ public class AuthService {
         return UserResponse.fromEntity(savedUser);
     }
 
+    private User getUserOrThrowInvalidCredentials(String email) {
+        try {
+            return userService.getUserEntityByEmail(email);
+        } catch (UserNotFoundException e) {
+            throw new InvalidCredentialsException();
+        }
+    }
+
     public LoginInitiatedResponse login(LoginRequest request) {
         User user = getUserOrThrowInvalidCredentials(request.getEmail());
 
@@ -65,8 +87,7 @@ public class AuthService {
 
         String otp = otpService.generateOtp(user.getEmail());
 
-        // TODO: send otp via email once mail sending is set up.
-        System.out.println("OTP for " + user.getEmail() + ": " + otp);
+        emailService.sendOtpEmail(user.getEmail(), otp);
 
         return new LoginInitiatedResponse(
                 "OTP sent to your registered email",
@@ -85,26 +106,5 @@ public class AuthService {
         String token = jwtService.generateToken(user);
 
         return new AuthResponse(token, "Bearer", UserResponse.fromEntity(user));
-    }
-
-    private User getUserOrThrowInvalidCredentials(String email) {
-        try {
-            return userService.getUserEntityByEmail(email);
-        } catch (UserNotFoundException e) {
-            throw new InvalidCredentialsException();
-        }
-    }
-
-    private String normalizePhoneNumber(String rawPhoneNumber) {
-        String cleaned = rawPhoneNumber.trim();
-
-        if (cleaned.startsWith("+")) {
-            return cleaned;
-        }
-
-        if (cleaned.startsWith("0")) {
-            cleaned = cleaned.substring(1);
-        }
-        return "+234" + cleaned;
     }
 }
