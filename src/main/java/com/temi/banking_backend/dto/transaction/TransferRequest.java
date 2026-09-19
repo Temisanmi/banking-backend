@@ -15,8 +15,9 @@ public class TransferRequest {
     @NotBlank(message = "Sender account ID is required")
     private String fromAccountId;
 
-    @NotBlank(message = "Recipient account number is required")
     private String toAccountNumber;
+
+    private String toPhoneNumber;
 
     @NotNull(message = "Amount is required")
     @DecimalMin(value = "0.01", message = "Amount must be greater than zero")

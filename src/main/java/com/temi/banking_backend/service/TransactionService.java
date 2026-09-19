@@ -1,5 +1,6 @@
 package com.temi.banking_backend.service;
 
+import com.temi.banking_backend.config.PhoneNumberUtil;
 import com.temi.banking_backend.dto.transaction.DepositRequest;
 import com.temi.banking_backend.dto.transaction.TransactionResponse;
 import com.temi.banking_backend.dto.transaction.TransferRequest;
@@ -10,10 +11,7 @@ import com.temi.banking_backend.entity.User;
 import com.temi.banking_backend.entity.enums.AccountStatus;
 import com.temi.banking_backend.entity.enums.TransactionStatus;
 import com.temi.banking_backend.entity.enums.TransactionType;
-import com.temi.banking_backend.exception.AccountNotActiveException;
-import com.temi.banking_backend.exception.AccountNotFoundException;
-import com.temi.banking_backend.exception.CurrencyMismatchException;
-import com.temi.banking_backend.exception.InsufficientFundsException;
+import com.temi.banking_backend.exception.*;
 import com.temi.banking_backend.repository.AccountRepository;
 import com.temi.banking_backend.repository.TransactionRepository;
 import com.temi.banking_backend.security.TransactionPinService;
@@ -32,6 +30,7 @@ public class TransactionService {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
     private final TransactionPinService transactionPinService;
+    private final PhoneNumberUtil phoneNumberUtil;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -64,6 +63,7 @@ public class TransactionService {
             throw new AccountNotActiveException(account.getStatus().name());
         }
     }
+
     @Transactional
     public TransactionResponse deposit(DepositRequest request, User performedBy) {
         Account account = accountRepository.findByIdForUpdate(request.getAccountId())
@@ -72,6 +72,7 @@ public class TransactionService {
         assertAccountActive(account);
 
         account.setBalance(account.getBalance().add(request.getAmount()));
+
         accountRepository.save(account);
 
         Transaction transaction = buildTransaction(
@@ -86,6 +87,7 @@ public class TransactionService {
             throw new InsufficientFundsException();
         }
     }
+
     @Transactional
     public TransactionResponse withdraw(WithdrawRequest request, User performedBy) {
         Account account = accountRepository.findByIdForUpdate(request.getAccountId())
@@ -107,13 +109,33 @@ public class TransactionService {
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
 
+    private Account resolveRecipientAccount(TransferRequest request) {
+        boolean hasAccountNumber = request.getToAccountNumber() != null && !request.getToAccountNumber().isBlank();
+        boolean hasPhoneNumber = request.getToPhoneNumber() != null && !request.getToPhoneNumber().isBlank();
+
+        if (hasAccountNumber == hasPhoneNumber){
+            throw new InvalidTransferRecipientException(
+                    "Provide only account number or phone number"
+            );
+        }
+
+        if (hasAccountNumber) {
+            return accountRepository.findByAccountNumber(request.getToAccountNumber())
+                    .orElseThrow(() -> new AccountNotFoundException(request.getToAccountNumber()));
+        }
+
+        String normalizedPhone = phoneNumberUtil.normalize(request.getToPhoneNumber());
+
+        return accountRepository.findCheckingAccountByOwnerPhoneNumber(normalizedPhone)
+                .orElseThrow(() -> new AccountNotFoundException(normalizedPhone));
+    }
+
     @Transactional
     public TransactionResponse transfer(TransferRequest request, User performedBy) {
         Account fromAccount = accountRepository.findByIdForUpdate(request.getFromAccountId())
                 .orElseThrow(() -> new AccountNotFoundException(request.getFromAccountId()));
 
-        Account toAccountLookup = accountRepository.findByAccountNumber(request.getToAccountNumber())
-                .orElseThrow(() -> new AccountNotFoundException(request.getToAccountNumber()));
+        Account toAccountLookup = resolveRecipientAccount(request);
 
         Account toAccount = accountRepository.findByIdForUpdate(toAccountLookup.getId())
                 .orElseThrow(() -> new AccountNotFoundException(toAccountLookup.getId()));
@@ -131,6 +153,7 @@ public class TransactionService {
         }
 
         fromAccount.setBalance(fromAccount.getBalance().subtract(request.getAmount()));
+
         toAccount.setBalance(toAccount.getBalance().add(request.getAmount()));
 
         accountRepository.save(fromAccount);

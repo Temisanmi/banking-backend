@@ -1,5 +1,6 @@
 package com.temi.banking_backend.service;
 
+import com.temi.banking_backend.config.PhoneNumberUtil;
 import com.temi.banking_backend.dto.user.LoginRequest;
 import com.temi.banking_backend.dto.user.RegisterUserRequest;
 import com.temi.banking_backend.dto.user.VerifyOtpRequest;
@@ -30,19 +31,7 @@ public class AuthService {
     private final JwtService jwtService;
     private final UserService userService;
     private final EmailService emailService;
-
-    private String normalizePhoneNumber(String rawPhoneNumber) {
-        String cleaned = rawPhoneNumber.trim();
-
-        if (cleaned.startsWith("+")) {
-            return cleaned;
-        }
-
-        if (cleaned.startsWith("0")) {
-            cleaned = cleaned.substring(1);
-        }
-        return "+234" + cleaned;
-    }
+    private final PhoneNumberUtil phoneNumberUtil;
 
     @Transactional
     public UserResponse register(RegisterUserRequest request) {
@@ -50,7 +39,7 @@ public class AuthService {
             throw new EmailAlreadyExistsException(request.getEmail());
         }
 
-        String normalizedPhoneNumber = normalizePhoneNumber(request.getPhoneNumber());
+        String normalizedPhoneNumber = phoneNumberUtil.normalize(request.getPhoneNumber());
 
         if (userRepository.existsByPhoneNumber(normalizedPhoneNumber)) {
             throw new PhoneNumberAlreadyExistsException(normalizedPhoneNumber);
