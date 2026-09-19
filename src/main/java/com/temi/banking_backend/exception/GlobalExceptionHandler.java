@@ -110,7 +110,10 @@ public class GlobalExceptionHandler {
     }
 
     @ExceptionHandler(
-            PinLockedException.class
+            {
+                    PinLockedException.class,
+                    LoginLockedException.class
+            }
     )
     public ResponseEntity<ErrorResponse> handleTooManyRequests(PinLockedException ex) {
         return buildResponse(
