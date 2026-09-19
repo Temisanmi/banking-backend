@@ -16,6 +16,7 @@ import com.temi.banking_backend.exception.CurrencyMismatchException;
 import com.temi.banking_backend.exception.InsufficientFundsException;
 import com.temi.banking_backend.repository.AccountRepository;
 import com.temi.banking_backend.repository.TransactionRepository;
+import com.temi.banking_backend.security.TransactionPinService;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -30,6 +31,7 @@ import java.time.LocalDateTime;
 public class TransactionService {
     private final AccountRepository accountRepository;
     private final TransactionRepository transactionRepository;
+    private final TransactionPinService transactionPinService;
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
@@ -91,6 +93,8 @@ public class TransactionService {
 
         assertAccountActive(account);
 
+        transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
+
         assertSufficientFunds(account, request.getAmount());
 
         account.setBalance(account.getBalance().subtract(request.getAmount()));
@@ -117,6 +121,8 @@ public class TransactionService {
         assertAccountActive(fromAccount);
 
         assertAccountActive(toAccount);
+
+        transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
 
         assertSufficientFunds(fromAccount, request.getAmount());
 
