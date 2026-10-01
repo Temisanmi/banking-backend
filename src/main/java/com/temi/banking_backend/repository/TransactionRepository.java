@@ -15,6 +15,8 @@ public interface TransactionRepository extends JpaRepository<Transaction, String
 
     boolean existsByReference(String reference);
 
+    boolean existsByPerformedById(String performedById);
+
     @Query("SELECT t FROM Transaction t WHERE (t.fromAccount.id = :accountId OR t.toAccount.id = :accountId) " +
             "AND t.initiatedAt BETWEEN :from AND :to ORDER BY t.initiatedAt DESC")
     Page<Transaction> findStatementForAccount(
