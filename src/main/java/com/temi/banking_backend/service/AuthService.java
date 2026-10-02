@@ -130,6 +130,12 @@ public class AuthService {
 
         User savedUser = userRepository.save(user);
 
+        try {
+            emailService.sendStaffWelcomeEmail(savedUser.getEmail(), savedUser.getFirstName(), savedUser.getRole().name());
+        } catch (EmailDeliveryException e) {
+            System.err.println("Failed to send staff welcome email to " + savedUser.getEmail());
+        }
+
         return UserResponse.fromEntity(savedUser);
     }
 
