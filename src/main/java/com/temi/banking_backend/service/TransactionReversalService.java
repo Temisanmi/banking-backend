@@ -114,6 +114,7 @@ public class TransactionReversalService {
             case DEPOSIT -> reverseDeposit(original, actor);
             case WITHDRAWAL -> reverseWithdrawal(original, actor);
             case TRANSFER -> reverseTransfer(original, actor);
+            case INTEREST -> throw new TransactionNotReversibleException(original.getType().name());
         };
 
         original.setStatus(TransactionStatus.REVERSED);
