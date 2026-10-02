@@ -69,4 +69,24 @@ public class EmailService {
             throw new EmailDeliveryException(toEmail, e);
         }
     }
+
+    public void sendStaffWelcomeEmail(String toEmail, String firstName, String role) {
+        SimpleMailMessage message = new SimpleMailMessage();
+        message.setFrom(fromAddress);
+        message.setTo(toEmail);
+        message.setSubject("Your " + appName + " staff account has been created");
+        message.setText("Hi " + firstName + ",\n\n" +
+                "An administrator has created a staff account for you on " + appName + " with the role: " + role + ".\n\n" +
+                "You can now log in using the email and password set up for you. Going forward, you'll receive " +
+                "OTPs and password reset codes at this email address whenever you log in or need to reset your " +
+                "password. Please check your spam or junk folder and mark these emails as \"not spam\" so you " +
+                "don't miss anything important.\n\n" +
+                "If you weren't expecting this account to be created, please contact an administrator.");
+
+        try {
+            mailSender.send(message);
+        } catch (MailException e) {
+            throw new EmailDeliveryException(toEmail, e);
+        }
+    }
 }
