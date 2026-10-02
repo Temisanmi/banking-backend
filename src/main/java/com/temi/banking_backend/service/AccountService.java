@@ -2,6 +2,7 @@ package com.temi.banking_backend.service;
 
 import com.temi.banking_backend.dto.account.AccountResponse;
 import com.temi.banking_backend.dto.account.CreateAccountRequest;
+import com.temi.banking_backend.dto.account.StaffAccountResponse;
 import com.temi.banking_backend.entity.Account;
 import com.temi.banking_backend.entity.User;
 import com.temi.banking_backend.entity.enums.AccountStatus;
@@ -78,12 +79,6 @@ public class AccountService {
                 .toList();
     }
 
-    private void assertIsTellerOrAdmin(User actor) {
-        if (actor.getRole() != Role.TELLER && actor.getRole() != Role.ADMIN){
-            throw new UnauthorizedAccountAccessException();
-        }
-    }
-
     private void assertCanFreeze(Account account, User actor){
         boolean isOwner = account.getOwner().getId().equals(actor.getId());
         boolean isStaff = actor.getRole() == Role.TELLER || actor.getRole() == Role.ADMIN;
@@ -156,5 +151,29 @@ public class AccountService {
         Account savedAccount = accountRepository.save(account);
 
         return AccountResponse.fromEntity(savedAccount);
+    }
+
+    private void assertIsTellerOrAdmin(User actor) {
+        if (actor.getRole() != Role.TELLER && actor.getRole() != Role.ADMIN){
+            throw new UnauthorizedAccountAccessException();
+        }
+    }
+
+    public StaffAccountResponse getAccountByNumber(String accountNumber, User requestingUser) {
+        assertIsTellerOrAdmin(requestingUser);
+
+        Account account = accountRepository.findByAccountNumber(accountNumber)
+                .orElseThrow(() -> new AccountNotFoundException(accountNumber));
+
+        return StaffAccountResponse.fromEntity(account);
+    }
+
+    public List<StaffAccountResponse> getAccountsForCustomer(String customerId, User requestingUser) {
+        assertIsTellerOrAdmin(requestingUser);
+
+        return accountRepository.findAllByOwnerId(customerId)
+                .stream()
+                .map(StaffAccountResponse::fromEntity)
+                .toList();
     }
 }
