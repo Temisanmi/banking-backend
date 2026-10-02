@@ -13,9 +13,11 @@ import java.util.Map;
 @RestControllerAdvice
 public class GlobalExceptionHandler {
 
-    private ResponseEntity<ErrorResponse> buildResponse(HttpStatus status,
-                                                        String error,
-                                                        String message) {
+    private ResponseEntity<ErrorResponse> buildResponse(
+            HttpStatus status,
+            String error,
+            String message
+    ) {
         ErrorResponse response = new ErrorResponse(status.value(), error, message);
         return ResponseEntity.status(status).body(response);
     }
