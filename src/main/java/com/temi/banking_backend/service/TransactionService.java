@@ -1,5 +1,6 @@
 package com.temi.banking_backend.service;
 
+import com.temi.banking_backend.config.PhoneNumberUtil;
 import com.temi.banking_backend.dto.transaction.DepositRequest;
 import com.temi.banking_backend.dto.transaction.TransactionResponse;
 import com.temi.banking_backend.dto.transaction.TransferRequest;
@@ -14,10 +15,10 @@ import com.temi.banking_backend.exception.AccountNotFoundException;
 import com.temi.banking_backend.exception.CurrencyMismatchException;
 import com.temi.banking_backend.exception.InsufficientFundsException;
 import com.temi.banking_backend.exception.InvalidTransferRecipientException;
+import com.temi.banking_backend.exception.UnauthorizedAccountAccessException;
 import com.temi.banking_backend.repository.AccountRepository;
 import com.temi.banking_backend.repository.TransactionRepository;
 import com.temi.banking_backend.security.TransactionPinService;
-import com.temi.banking_backend.config.PhoneNumberUtil;
 import lombok.RequiredArgsConstructor;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
@@ -43,8 +44,8 @@ public class TransactionService {
 
     @Transactional
     public TransactionResponse deposit(DepositRequest request, User performedBy) {
-        Account account = accountRepository.findByIdForUpdate(request.getAccountId())
-                .orElseThrow(() -> new AccountNotFoundException(request.getAccountId()));
+        Account account = accountRepository.findByIdForUpdateAndOwnerId(request.getAccountId(), performedBy.getId())
+                .orElseThrow(UnauthorizedAccountAccessException::new);
 
         assertAccountActive(account);
 
@@ -53,8 +54,12 @@ public class TransactionService {
         accountRepository.save(account);
 
         Transaction transaction = transactionBuilder.build(
-                TransactionType.DEPOSIT, request.getAmount(), null, account,
-                performedBy, request.getDescription()
+                TransactionType.DEPOSIT,
+                request.getAmount(),
+                null,
+                account,
+                performedBy,
+                request.getDescription()
         );
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
@@ -81,20 +86,25 @@ public class TransactionService {
         accountRepository.save(account);
 
         Transaction transaction = transactionBuilder.build(
-                TransactionType.WITHDRAWAL, request.getAmount(), account, null,
-                performedBy, request.getDescription()
+                TransactionType.WITHDRAWAL,
+                request.getAmount(),
+                account,
+                null,
+                performedBy,
+                request.getDescription()
         );
-
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
 
     private Account resolveRecipientAccount(TransferRequest request) {
         boolean hasAccountNumber = request.getToAccountNumber() != null && !request.getToAccountNumber().isBlank();
+
         boolean hasPhoneNumber = request.getToPhoneNumber() != null && !request.getToPhoneNumber().isBlank();
 
         if (hasAccountNumber == hasPhoneNumber) {
             throw new InvalidTransferRecipientException(
-                    "Provide either account number or phone number");
+                    "Provide either account number or phone number"
+            );
         }
 
         if (hasAccountNumber) {
@@ -110,8 +120,11 @@ public class TransactionService {
 
     @Transactional
     public TransactionResponse transfer(TransferRequest request, User performedBy) {
-        Account fromAccount = accountRepository.findByIdForUpdate(request.getFromAccountId())
-                .orElseThrow(() -> new AccountNotFoundException(request.getFromAccountId()));
+        Account fromAccount =
+                accountRepository.findByIdForUpdateAndOwnerId(
+                        request.getFromAccountId(),
+                        performedBy.getId()
+                ).orElseThrow(UnauthorizedAccountAccessException::new);
 
         Account toAccountLookup = resolveRecipientAccount(request);
 
@@ -135,17 +148,28 @@ public class TransactionService {
         toAccount.setBalance(toAccount.getBalance().add(request.getAmount()));
 
         accountRepository.save(fromAccount);
+
         accountRepository.save(toAccount);
 
         Transaction transaction = transactionBuilder.build(
-                TransactionType.TRANSFER, request.getAmount(), fromAccount, toAccount,
-                performedBy, request.getDescription()
+                TransactionType.TRANSFER,
+                request.getAmount(),
+                fromAccount,
+                toAccount,
+                performedBy,
+                request.getDescription()
         );
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
 
     public Page<TransactionResponse> getAccountStatement(String accountId, LocalDateTime from, LocalDateTime to, Pageable pageable) {
-        Page<Transaction> transactions = transactionRepository.findStatementForAccount(accountId, from, to, pageable);
+        Page<Transaction> transactions =
+                transactionRepository.findStatementForAccount(
+                        accountId,
+                        from,
+                        to,
+                        pageable
+                );
         return transactions.map(TransactionResponse::fromEntity);
     }
 }
