@@ -19,19 +19,28 @@ public class TransactionBuilder {
 
     private static final SecureRandom RANDOM = new SecureRandom();
 
-    public Transaction build(TransactionType type, BigDecimal amount,
-                             Account fromAccount, Account toAccount,
-                             User performedBy, String description) {
+    public Transaction build(TransactionType type,
+                             BigDecimal amount,
+                             Account fromAccount,
+                             Account toAccount,
+                             User performedBy,
+                             String description,
+                             TransactionStatus status) {
         Transaction transaction = new Transaction();
+
         transaction.setType(type);
         transaction.setAmount(amount);
         transaction.setFromAccount(fromAccount);
         transaction.setToAccount(toAccount);
         transaction.setPerformedBy(performedBy);
-        transaction.setStatus(TransactionStatus.COMPLETED);
+        transaction.setStatus(status);
         transaction.setDescription(description);
         transaction.setReference(generateUniqueReference());
-        transaction.setCompletedAt(LocalDateTime.now());
+
+        if (status == TransactionStatus.COMPLETED){
+            transaction.setCompletedAt(LocalDateTime.now());
+        }
+
         return transaction;
     }
 

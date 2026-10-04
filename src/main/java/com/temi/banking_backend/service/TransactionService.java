@@ -9,6 +9,7 @@ import com.temi.banking_backend.entity.Account;
 import com.temi.banking_backend.entity.Transaction;
 import com.temi.banking_backend.entity.User;
 import com.temi.banking_backend.entity.enums.AccountStatus;
+import com.temi.banking_backend.entity.enums.TransactionStatus;
 import com.temi.banking_backend.entity.enums.TransactionType;
 import com.temi.banking_backend.exception.AccountNotActiveException;
 import com.temi.banking_backend.exception.AccountNotFoundException;
@@ -35,6 +36,7 @@ public class TransactionService {
     private final TransactionPinService transactionPinService;
     private final PhoneNumberUtil phoneNumberUtil;
     private final TransactionBuilder transactionBuilder;
+    private final FailedTransactionService failedTransactionService;
 
     private void assertAccountActive(Account account) {
         if (account.getStatus() != AccountStatus.ACTIVE) {
@@ -59,7 +61,8 @@ public class TransactionService {
                 null,
                 account,
                 performedBy,
-                request.getDescription()
+                request.getDescription(),
+                TransactionStatus.COMPLETED
         );
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
@@ -72,14 +75,27 @@ public class TransactionService {
 
     @Transactional
     public TransactionResponse withdraw(WithdrawRequest request, User performedBy) {
-        Account account = accountRepository.findByIdForUpdate(request.getAccountId())
-                .orElseThrow(() -> new AccountNotFoundException(request.getAccountId()));
+        Account account = accountRepository.findByIdForUpdateAndOwnerId(request.getAccountId(), performedBy.getId())
+                .orElseThrow(UnauthorizedAccountAccessException::new);
 
         assertAccountActive(account);
 
         transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
 
-        assertSufficientFunds(account, request.getAmount());
+        try {
+            assertSufficientFunds(account, request.getAmount());
+        } catch (InsufficientFundsException ex) {
+            failedTransactionService.recordFailedTransaction(
+                    TransactionType.WITHDRAWAL,
+                    request.getAmount(),
+                    account,
+                    null,
+                    performedBy,
+                    request.getDescription(),
+                    ex.getMessage()
+            );
+            throw ex;
+        }
 
         account.setBalance(account.getBalance().subtract(request.getAmount()));
 
@@ -91,7 +107,8 @@ public class TransactionService {
                 account,
                 null,
                 performedBy,
-                request.getDescription()
+                request.getDescription(),
+                TransactionStatus.COMPLETED
         );
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
@@ -137,7 +154,20 @@ public class TransactionService {
 
         transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
 
-        assertSufficientFunds(fromAccount, request.getAmount());
+        try {
+            assertSufficientFunds(fromAccount, request.getAmount());
+        } catch (InsufficientFundsException ex) {
+            failedTransactionService.recordFailedTransaction(
+                    TransactionType.TRANSFER,
+                    request.getAmount(),
+                    fromAccount,
+                    toAccount,
+                    performedBy,
+                    request.getDescription(),
+                    ex.getMessage()
+            );
+            throw ex;
+        }
 
         if (fromAccount.getCurrency() != toAccount.getCurrency()) {
             throw new CurrencyMismatchException();
@@ -157,7 +187,8 @@ public class TransactionService {
                 fromAccount,
                 toAccount,
                 performedBy,
-                request.getDescription()
+                request.getDescription(),
+                TransactionStatus.COMPLETED
         );
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
