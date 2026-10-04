@@ -156,7 +156,11 @@ public class TransactionService {
 
         try {
             assertSufficientFunds(fromAccount, request.getAmount());
-        } catch (InsufficientFundsException ex) {
+
+            if (fromAccount.getCurrency() != toAccount.getCurrency()) {
+                throw new CurrencyMismatchException();
+            }
+        } catch (InsufficientFundsException | CurrencyMismatchException ex) {
             failedTransactionService.recordFailedTransaction(
                     TransactionType.TRANSFER,
                     request.getAmount(),
@@ -167,10 +171,6 @@ public class TransactionService {
                     ex.getMessage()
             );
             throw ex;
-        }
-
-        if (fromAccount.getCurrency() != toAccount.getCurrency()) {
-            throw new CurrencyMismatchException();
         }
 
         fromAccount.setBalance(fromAccount.getBalance().subtract(request.getAmount()));
