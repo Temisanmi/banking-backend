@@ -100,6 +100,7 @@ public class GlobalExceptionHandler {
                 EmailAlreadyExistsException.class,
                 PhoneNumberAlreadyExistsException.class,
                 InsufficientFundsException.class,
+                AccountBalanceNotZeroException.class,
                 TransactionNotReversibleException.class
             }
     )
