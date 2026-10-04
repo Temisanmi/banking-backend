@@ -7,6 +7,7 @@ import com.temi.banking_backend.entity.Account;
 import com.temi.banking_backend.entity.User;
 import com.temi.banking_backend.entity.enums.AccountStatus;
 import com.temi.banking_backend.entity.enums.Role;
+import com.temi.banking_backend.exception.AccountBalanceNotZeroException;
 import com.temi.banking_backend.exception.AccountNotFoundException;
 import com.temi.banking_backend.exception.InvalidAccountStatusTransitionException;
 import com.temi.banking_backend.exception.UnauthorizedAccountAccessException;
@@ -14,6 +15,7 @@ import com.temi.banking_backend.repository.AccountRepository;
 import lombok.RequiredArgsConstructor;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import java.math.BigDecimal;
 import java.security.SecureRandom;
 import java.util.List;
 
@@ -45,6 +47,7 @@ public class AccountService {
     @Transactional
     public AccountResponse createAccount(CreateAccountRequest request, User owner) {
         Account account = new Account();
+
         account.setAccountNumber(generateUniqueAccountNumber());
         account.setType(request.getType());
         account.setCurrency(request.getCurrency());
@@ -69,6 +72,7 @@ public class AccountService {
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
 
         assertCanView(account, requestingUser);
+
         return AccountResponse.fromEntity(account);
     }
 
@@ -84,12 +88,6 @@ public class AccountService {
         boolean isStaff = actor.getRole() == Role.TELLER || actor.getRole() == Role.ADMIN;
 
         if (!isOwner && !isStaff) {
-            throw new UnauthorizedAccountAccessException();
-        }
-    }
-
-    private void assertIsAdmin(User actor) {
-        if (actor.getRole() != Role.ADMIN) {
             throw new UnauthorizedAccountAccessException();
         }
     }
@@ -121,12 +119,29 @@ public class AccountService {
         return AccountResponse.fromEntity(savedAccount);
     }
 
+    private void assertCanClose(Account account, User actor) {
+        boolean isOwner = account.getOwner().getId().equals(actor.getId());
+        boolean isAdmin = actor.getRole() == Role.ADMIN;
+
+        if (!isOwner && !isAdmin) {
+            throw new UnauthorizedAccountAccessException();
+        }
+    }
+
+    private void assertZeroBalance(Account account) {
+        if (account.getBalance().compareTo(BigDecimal.ZERO) != 0) {
+            throw new AccountBalanceNotZeroException();
+        }
+    }
+
     @Transactional
     public AccountResponse closeAccount(String accountId, User actor){
-        assertIsAdmin(actor);
-
         Account account = accountRepository.findByIdForUpdate(accountId)
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
+
+        assertCanClose(account, actor);
+
+        assertZeroBalance(account);
 
         assertTransitionAllowed(account.getStatus(), AccountStatus.CLOSED);
 
@@ -135,6 +150,12 @@ public class AccountService {
         Account savedAccount = accountRepository.save(account);
 
         return AccountResponse.fromEntity(savedAccount);
+    }
+
+    private void assertIsAdmin(User actor) {
+        if (actor.getRole() != Role.ADMIN) {
+            throw new UnauthorizedAccountAccessException();
+        }
     }
 
     @Transactional
