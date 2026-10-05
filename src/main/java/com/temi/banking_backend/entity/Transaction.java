@@ -10,7 +10,26 @@ import java.math.BigDecimal;
 import java.time.LocalDateTime;
 
 @Entity
-@Table(name = "transactions")
+@Table(name = "transactions",
+        indexes = {
+            @Index(
+                    name = "idx_transactions_from_account_date",
+                    columnList = "from_account_id,initiated_at"
+            ),
+            @Index(
+                    name = "idx_transactions_to_account_date",
+                    columnList = "to_account_id,initiated_at"
+            ),
+            @Index(
+                    name = "idx_transactions_performed_by",
+                    columnList = "performed_by_id"
+            ),
+            @Index(
+                    name = "idx_transactions_reversal_of",
+                    columnList = "reversal_of_id"
+            )
+        }
+)
 @NoArgsConstructor
 @Getter
 @Setter
