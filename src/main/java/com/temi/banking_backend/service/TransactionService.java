@@ -75,12 +75,12 @@ public class TransactionService {
 
     @Transactional
     public TransactionResponse withdraw(WithdrawRequest request, User performedBy) {
+        transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
+
         Account account = accountRepository.findByIdForUpdateAndOwnerId(request.getAccountId(), performedBy.getId())
                 .orElseThrow(UnauthorizedAccountAccessException::new);
 
         assertAccountActive(account);
-
-        transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
 
         try {
             assertSufficientFunds(account, request.getAmount());
@@ -113,7 +113,7 @@ public class TransactionService {
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
 
-    private Account resolveRecipientAccount(TransferRequest request) {
+    private String resolveRecipientAccountId(TransferRequest request) {
         boolean hasAccountNumber = request.getToAccountNumber() != null && !request.getToAccountNumber().isBlank();
 
         boolean hasPhoneNumber = request.getToPhoneNumber() != null && !request.getToPhoneNumber().isBlank();
@@ -125,34 +125,47 @@ public class TransactionService {
         }
 
         if (hasAccountNumber) {
-            return accountRepository.findByAccountNumber(request.getToAccountNumber())
+            return accountRepository.findIdByAccountNumber(request.getToAccountNumber())
                     .orElseThrow(() -> new AccountNotFoundException(request.getToAccountNumber()));
         }
 
         String normalizedPhone = phoneNumberUtil.normalize(request.getToPhoneNumber());
 
-        return accountRepository.findCheckingAccountByOwnerPhoneNumber(normalizedPhone)
+        return accountRepository.findCheckingAccountIdByOwnerPhoneNumber(normalizedPhone)
                 .orElseThrow(() -> new AccountNotFoundException(normalizedPhone));
+    }
+
+    private Account lockAccount(String accountId) {
+        return accountRepository.findByIdForUpdate(accountId)
+                .orElseThrow(() -> new AccountNotFoundException(accountId));
     }
 
     @Transactional
     public TransactionResponse transfer(TransferRequest request, User performedBy) {
-        Account fromAccount =
-                accountRepository.findByIdForUpdateAndOwnerId(
-                        request.getFromAccountId(),
-                        performedBy.getId()
-                ).orElseThrow(UnauthorizedAccountAccessException::new);
+        transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
 
-        Account toAccountLookup = resolveRecipientAccount(request);
+        String fromId = request.getFromAccountId();
 
-        Account toAccount = accountRepository.findByIdForUpdate(toAccountLookup.getId())
-                .orElseThrow(() -> new AccountNotFoundException(toAccountLookup.getId()));
+        if (!accountRepository.existsByIdAndOwnerId(fromId, performedBy.getId())) {
+            throw new UnauthorizedAccountAccessException();
+        }
+
+        String toId = resolveRecipientAccountId(request);
+
+        if (fromId.equals(toId)) {
+            throw new InvalidTransferRecipientException("You cannot transfer to the same account");
+        }
+
+        boolean fromFirst = fromId.compareTo(toId) < 0;
+
+        Account first = lockAccount(fromFirst ? fromId : toId);
+        Account second = lockAccount(fromFirst ? toId : fromId);
+
+        Account fromAccount = fromFirst ? first : second;
+        Account toAccount = fromFirst ? second : first;
 
         assertAccountActive(fromAccount);
-
         assertAccountActive(toAccount);
-
-        transactionPinService.verifyPin(performedBy.getId(), request.getPin(), performedBy.getTransactionPin());
 
         try {
             assertSufficientFunds(fromAccount, request.getAmount());
@@ -193,6 +206,7 @@ public class TransactionService {
         return TransactionResponse.fromEntity(transactionRepository.save(transaction));
     }
 
+    @Transactional(readOnly = true)
     public Page<TransactionResponse> getAccountStatement(String accountId, LocalDateTime from, LocalDateTime to, Pageable pageable) {
         Page<Transaction> transactions =
                 transactionRepository.findStatementForAccount(

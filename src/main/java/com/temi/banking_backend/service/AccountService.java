@@ -67,6 +67,7 @@ public class AccountService {
         }
     }
 
+    @Transactional(readOnly = true)
     public AccountResponse getAccountById(String accountId, User requestingUser) {
         Account account = accountRepository.findById(accountId)
                 .orElseThrow(() -> new AccountNotFoundException(accountId));
@@ -76,6 +77,7 @@ public class AccountService {
         return AccountResponse.fromEntity(account);
     }
 
+    @Transactional(readOnly = true)
     public List<AccountResponse> getMyAccounts(User owner) {
         return accountRepository.findAllByOwnerId(owner.getId())
                 .stream()
@@ -180,6 +182,7 @@ public class AccountService {
         }
     }
 
+    @Transactional(readOnly = true)
     public StaffAccountResponse getAccountByNumber(String accountNumber, User requestingUser) {
         assertIsTellerOrAdmin(requestingUser);
 
@@ -189,6 +192,7 @@ public class AccountService {
         return StaffAccountResponse.fromEntity(account);
     }
 
+    @Transactional(readOnly = true)
     public List<StaffAccountResponse> getAccountsForCustomer(String customerId, User requestingUser) {
         assertIsTellerOrAdmin(requestingUser);
 
