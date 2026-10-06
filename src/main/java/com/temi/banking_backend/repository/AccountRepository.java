@@ -34,13 +34,15 @@ public interface AccountRepository extends JpaRepository<Account, String> {
             @Param("ownerId") String ownerId
     );
 
-    @Query("SELECT a FROM Account a WHERE a.owner.phoneNumber = :phoneNumber AND a.type = 'CHECKING'")
-    Optional<Account> findCheckingAccountByOwnerPhoneNumber(@Param("phoneNumber") String phoneNumber);
-
-    List<Account> findAllByTypeAndStatus(
-            AccountType type,
-            AccountStatus status
-    );
+    List<Account> findAllByTypeAndStatus(AccountType type, AccountStatus status);
 
     boolean existsByOwnerId(String ownerId);
+
+    boolean existsByIdAndOwnerId(String id, String ownerId);
+
+    @Query("SELECT a.id FROM Account a WHERE a.accountNumber = :accountNumber")
+    Optional<String> findIdByAccountNumber(@Param("accountNumber") String accountNumber);
+
+    @Query("SELECT a.id FROM Account a WHERE a.owner.phoneNumber = :phoneNumber AND a.type = 'CHECKING'")
+    Optional<String> findCheckingAccountIdByOwnerPhoneNumber(@Param("phoneNumber") String phoneNumber);
 }
